@@ -9,8 +9,8 @@ import type {
   PayRailConfig,
   PaymentRequiredResponse,
   PaymentPayload,
-  ExactEVMPayload,
-  EIP3009Authorization,
+  ExactEvmPayload,
+  ExactEvmPayloadAuthorization,
   PaymentRequirements,
 } from './types';
 
@@ -47,8 +47,7 @@ export class FacilitatorClient {
 
     try {
       const response = await this.client.post<VerifyResponse>('/verify', {
-        x402Version: request.x402Version,
-        paymentHeader: request.paymentHeader,
+        paymentPayload: request.paymentPayload,
         paymentRequirements: request.paymentRequirements,
       });
 
@@ -78,8 +77,7 @@ export class FacilitatorClient {
           const retryResponse = await this.client.post<VerifyResponse>(
             '/verify',
             {
-              x402Version: request.x402Version,
-              paymentHeader: request.paymentHeader,
+              paymentPayload: request.paymentPayload,
               paymentRequirements: request.paymentRequirements,
             },
             {
@@ -107,8 +105,7 @@ export class FacilitatorClient {
 
     try {
       const response = await this.client.post<SettleResponse>('/settle', {
-        x402Version: request.x402Version,
-        paymentHeader: request.paymentHeader,
+        paymentPayload: request.paymentPayload,
         paymentRequirements: request.paymentRequirements,
       });
 
@@ -136,8 +133,7 @@ export class FacilitatorClient {
           const retryResponse = await this.client.post<SettleResponse>(
             '/settle',
             {
-              x402Version: request.x402Version,
-              paymentHeader: request.paymentHeader,
+              paymentPayload: request.paymentPayload,
               paymentRequirements: request.paymentRequirements,
             },
             {
@@ -185,15 +181,9 @@ export class FacilitatorClient {
     // Generate random nonce for replay protection
     const nonce = ethers.hexlify(ethers.randomBytes(32));
 
-    // Create EIP-3009 authorization object (addresses must be lowercase for EIP-712)
-    const authorization: EIP3009Authorization = {
-      from: this.wallet.address.toLowerCase(),
-      to: paymentRequirement.payTo.toLowerCase(),
-      value: paymentRequirement.maxAmountRequired,
-      validAfter: now,
-      validBefore: now + paymentRequirement.maxTimeoutSeconds,
-      nonce: nonce,
-    };
+    // Create authorization values for EIP-712 signing
+    const validAfter = now;
+    const validBefore = now + paymentRequirement.maxTimeoutSeconds;
 
     // Get token metadata based on the actual token address
     const tokenMetadata = this.getTokenMetadata(
@@ -221,10 +211,30 @@ export class FacilitatorClient {
       ],
     };
 
-    // Sign the authorization using EIP-712
-    const signature = await this.wallet.signTypedData(domain, types, authorization);
+    // Create message for EIP-712 signing (with numeric timestamps)
+    const message = {
+      from: this.wallet.address.toLowerCase(),
+      to: paymentRequirement.payTo.toLowerCase(),
+      value: paymentRequirement.maxAmountRequired,
+      validAfter,
+      validBefore,
+      nonce,
+    };
 
-    const payload: ExactEVMPayload = {
+    // Sign the authorization using EIP-712
+    const signature = await this.wallet.signTypedData(domain, types, message);
+
+    // Create x402 authorization object with string timestamps (per spec)
+    const authorization: ExactEvmPayloadAuthorization = {
+      from: this.wallet.address.toLowerCase(),
+      to: paymentRequirement.payTo.toLowerCase(),
+      value: paymentRequirement.maxAmountRequired,
+      validAfter: validAfter.toString(),
+      validBefore: validBefore.toString(),
+      nonce: nonce,
+    };
+
+    const payload: ExactEvmPayload = {
       signature,
       authorization,
     };

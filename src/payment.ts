@@ -14,7 +14,8 @@ interface EIP712Domain {
 }
 
 /**
- * USDC TransferWithAuthorization parameters
+ * USDC TransferWithAuthorization parameters for EIP-712 signing
+ * Note: validAfter and validBefore are strings to match uint256 encoding
  */
 interface TransferWithAuthorization {
   from: string;
@@ -122,8 +123,8 @@ export class PaymentHandler {
           from: this.wallet.address.toLowerCase(),
           to: to.toLowerCase(),
           value,
-          validAfter: validAfter,
-          validBefore: validBefore,
+          validAfter: validAfter.toString(),
+          validBefore: validBefore.toString(),
           nonce,
         },
       },

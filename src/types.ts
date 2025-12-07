@@ -23,8 +23,7 @@ export type PaymentScheme = 'exact' | string;
  * Request to verify a payment
  */
 export interface VerifyRequest {
-  x402Version: X402Version;
-  paymentHeader: string;
+  paymentPayload: PaymentPayload;
   paymentRequirements: PaymentRequirements;
 }
 
@@ -38,48 +37,59 @@ export interface PaymentRequirements {
   resource: string;
   description: string;
   mimeType: string;
-  outputSchema?: object | null;
+  outputSchema?: object;
   payTo: string;
   maxTimeoutSeconds: number;
   asset: string;
-  extra: object | null
+  extra?: object;
 }
 
 /**
- * Payment required response
+ * Payment required response (402 status)
  */
 export interface PaymentRequiredResponse {
   x402Version: number;
-  accepts: [PaymentRequirements];
-  error: string
+  accepts: PaymentRequirements[];
+  error?: string;
 }
 
 
 /**
  * EIP-3009 Authorization parameters for transferWithAuthorization
+ * Aligned with x402 ExactEvmPayloadAuthorization
  */
-export interface EIP3009Authorization {
+export interface ExactEvmPayloadAuthorization {
   from: string;        // Ethereum address (payer)
   to: string;          // Ethereum address (recipient/resource server)
   value: string;       // String representation of token amount
-  validAfter: number;  // Unix timestamp (start validity)
-  validBefore: number; // Unix timestamp (end validity)
+  validAfter: string;  // Unix timestamp as string (start validity)
+  validBefore: string; // Unix timestamp as string (end validity)
   nonce: string;       // Hexadecimal hash for replay protection
 }
 
 /**
- * Payload for exact EVM scheme payment
+ * @deprecated Use ExactEvmPayloadAuthorization instead
  */
-export interface ExactEVMPayload {
+export type EIP3009Authorization = ExactEvmPayloadAuthorization;
+
+/**
+ * Payload for exact EVM scheme payment
+ * Aligned with x402 ExactEvmPayload
+ */
+export interface ExactEvmPayload {
   signature: string;                // Hexadecimal string of EIP-3009 signature
-  authorization: EIP3009Authorization;
+  authorization: ExactEvmPayloadAuthorization;
 }
 
+/**
+ * Payment payload sent in X-Payment header
+ * Aligned with x402 PaymentPayload
+ */
 export interface PaymentPayload {
   x402Version: number;
   scheme: string;
   network: string;
-  payload: ExactEVMPayload;
+  payload: ExactEvmPayload | object; // ExactEvmPayload for EVM, can be extended for other schemes
 }
 
 /**
@@ -88,14 +98,14 @@ export interface PaymentPayload {
 export interface VerifyResponse {
   isValid: boolean;
   invalidReason?: string;
+  payer?: string;
 }
 
 /**
  * Request to settle a payment on-chain
  */
 export interface SettleRequest {
-  x402Version: X402Version;
-  paymentHeader: string;
+  paymentPayload: PaymentPayload;
   paymentRequirements: PaymentRequirements;
 }
 
@@ -104,9 +114,10 @@ export interface SettleRequest {
  */
 export interface SettleResponse {
   success: boolean;
-  error?: string;
-  txHash?: string;
-  networkId?: string;
+  errorReason?: string;
+  payer?: string;
+  transaction: string;
+  network: string;
 }
 
 /**
@@ -137,6 +148,21 @@ export interface PayRailConfig {
 
   /**
    * Private key for signing transactions (hex string with or without 0x prefix)
+   *
+   * Use `generatePrivateKey()` from this package to create a new key if needed.
+   * Generated keys should be persisted and reused - each key corresponds to an
+   * on-chain wallet address that needs to be funded.
+   *
+   * @example
+   * // Use existing key from environment
+   * privateKey: process.env.PRIVATE_KEY
+   *
+   * @example
+   * // Generate and persist a new key
+   * import { generatePrivateKey } from '@payrail/sdk';
+   * const key = generatePrivateKey();
+   * // Save key.privateKey to storage, then use it
+   * privateKey: key.privateKey
    */
   privateKey: string;
 

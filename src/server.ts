@@ -1,14 +1,11 @@
 import { FacilitatorClient } from './facilitator-client';
-import type { PayRailConfig, VerifyResponse, SettleResponse, PaymentRequirements } from './types';
+import type { PayRailConfig, VerifyResponse, SettleResponse, PaymentRequirements, PaymentPayload } from './types';
 
 /**
  * Payment information extracted from X-Payment header
  */
 export interface PaymentInfo {
-  x402Version: number;
-  paymentHeader: string;
-  scheme: string;
-  network: string;
+  paymentPayload: PaymentPayload;
 }
 
 /**
@@ -17,8 +14,8 @@ export interface PaymentInfo {
 export interface PaymentResult {
   success: boolean;
   error?: string;
-  txHash?: string;
-  networkId?: string;
+  transaction?: string;
+  network?: string;
   verifyResponse?: VerifyResponse;
   settleResponse?: SettleResponse;
 }
@@ -66,13 +63,10 @@ export class PayRailServer {
         return null;
       }
 
-      const parsed = JSON.parse(paymentHeader);
+      const paymentPayload: PaymentPayload = JSON.parse(paymentHeader);
 
       return {
-        x402Version: parsed.x402Version ?? 1,
-        paymentHeader: paymentHeader,
-        scheme: parsed.scheme,
-        network: parsed.network,
+        paymentPayload,
       };
     } catch (error) {
       this.logError('Failed to parse X-Payment header', error);
@@ -94,8 +88,7 @@ export class PayRailServer {
     this.log('Verifying payment with facilitator', { paymentInfo, paymentRequirements });
 
     const result = await this.facilitatorClient.verify({
-      x402Version: paymentInfo.x402Version,
-      paymentHeader: paymentInfo.paymentHeader,
+      paymentPayload: paymentInfo.paymentPayload,
       paymentRequirements,
     });
 
@@ -117,8 +110,7 @@ export class PayRailServer {
     this.log('Settling payment with facilitator', { paymentInfo, paymentRequirements });
 
     const result = await this.facilitatorClient.settle({
-      x402Version: paymentInfo.x402Version,
-      paymentHeader: paymentInfo.paymentHeader,
+      paymentPayload: paymentInfo.paymentPayload,
       paymentRequirements,
     });
 
@@ -159,24 +151,24 @@ export class PayRailServer {
       const settleResponse = await this.settle(paymentInfo, paymentRequirements);
 
       if (!settleResponse.success) {
-        this.log('Payment settlement failed', settleResponse.error);
+        this.log('Payment settlement failed', settleResponse.errorReason);
         return {
           success: false,
-          error: settleResponse.error || 'Payment settlement failed',
+          error: settleResponse.errorReason || 'Payment settlement failed',
           verifyResponse,
           settleResponse,
         };
       }
 
       this.log('Payment successful', {
-        txHash: settleResponse.txHash,
-        network: settleResponse.networkId,
+        transaction: settleResponse.transaction,
+        network: settleResponse.network,
       });
 
       return {
         success: true,
-        txHash: settleResponse.txHash,
-        networkId: settleResponse.networkId,
+        transaction: settleResponse.transaction,
+        network: settleResponse.network,
         verifyResponse,
         settleResponse,
       };

@@ -9,26 +9,78 @@
  *
  * SERVER-SIDE (Backend/API):
  * - PayRailServer: Verifies and settles payments with the facilitator
- * - Handles 402 responses from facilitator and creates payment signatures (requires private key)
+ * - Handles 402 responses from facilitator and creates payment signatures
  *
- * Example usage:
+ * ## Private Key Handling
  *
- * Client-side:
+ * A private key is required for signing payment authorizations. You can either:
+ * - Use an existing key (e.g., from environment variables)
+ * - Generate a new key using `generatePrivateKey()`
+ *
+ * **IMPORTANT:** Generated keys should be persisted and reused. Each key corresponds
+ * to an on-chain wallet address that needs to be funded.
+ *
+ * **TIP:** If you use the same wallet address as your payment recipient (`payTo`),
+ * the wallet will be automatically funded with each successful payment settlement.
+ * This means you can use the same key for both receiving payments and paying for
+ * facilitator fees without manual funding.
+ *
+ * ## Example usage:
+ *
+ * ### Generating a new key (first-time setup):
+ * ```typescript
+ * import { generatePrivateKey } from '@payrail/sdk';
+ *
+ * // Generate a new key pair
+ * const key = generatePrivateKey();
+ * console.log('New wallet address:', key.address);
+ * console.log('Save the private key securely');
+ *
+ * // Use key.address as your payTo address in payment requirements
+ * // Payments you receive will fund this wallet automatically
+ *
+ * // Persist the key (example: save to .env file)
+ * fs.writeFileSync('.env', `PRIVATE_KEY=${key.privateKey}\n`);
+ * ```
+ *
+ * ### Client-side:
  * ```typescript
  * import { PayRailClient } from '@payrail/sdk';
- * const client = new PayRailClient({ privateKey: userWallet });
+ *
+ * // Load or generate key
+ * let privateKey = localStorage.getItem('payrail_key');
+ * if (!privateKey) {
+ *   const key = generatePrivateKey();
+ *   localStorage.setItem('payrail_key', key.privateKey);
+ *   privateKey = key.privateKey;
+ *   console.log('New wallet created:', key.address);
+ * }
+ *
+ * const client = new PayRailClient({
+ *   facilitatorUrl: '...',
+ *   privateKey
+ * });
  * client.attachInterceptor(axios);
  * ```
  *
- * Server-side:
+ * ### Server-side:
  * ```typescript
- * import { PayRailServer } from '@payrail/sdk';
+ * import { PayRailServer, getAddressFromPrivateKey } from '@payrail/sdk';
+ *
+ * const privateKey = process.env.PRIVATE_KEY;
+ * const walletAddress = getAddressFromPrivateKey(privateKey);
+ *
  * const server = new PayRailServer({
  *   facilitatorUrl: '...',
- *   privateKey: '0x...' // Required to pay facilitator if it's not free
+ *   privateKey
  * });
- * const paymentInfo = server.extractPaymentInfo(req.headers);
- * const result = await server.verifyAndSettle(paymentInfo, requirements);
+ *
+ * // Use walletAddress as payTo - received payments fund the same wallet
+ * // used for facilitator fees, creating a self-sustaining system
+ * const paymentRequirements = {
+ *   payTo: walletAddress,
+ *   // ... other requirements
+ * };
  * ```
  */
 
@@ -42,6 +94,11 @@ export { PayRailServer } from './server';
 export { FacilitatorClient } from './facilitator-client';
 export { PaymentHandler } from './payment';
 export { NETWORKS, getNetworkConfig } from './networks';
+export {
+  generatePrivateKey,
+  isValidPrivateKey,
+  getAddressFromPrivateKey,
+} from './key-utils';
 
 export type {
   PayRailConfig,
@@ -52,6 +109,11 @@ export type {
   SupportedKind,
   SupportedResponse,
   PaymentRequirements,
+  PaymentRequiredResponse,
+  PaymentPayload,
+  ExactEvmPayload,
+  ExactEvmPayloadAuthorization,
+  EIP3009Authorization, // deprecated alias
   X402Version,
   NetworkId,
   PaymentScheme,
@@ -59,3 +121,4 @@ export type {
 
 export type { NetworkConfig } from './networks';
 export type { PaymentInfo, PaymentResult } from './server';
+export type { GeneratedKey } from './key-utils';
